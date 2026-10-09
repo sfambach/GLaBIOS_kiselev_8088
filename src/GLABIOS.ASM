@@ -268,8 +268,10 @@ POST_HD_CHECK	=	1		; Enable POST HD drive count and size
 						;   work around (disables POST_HD_PARMS)
 FD_AUTO_DETECT	=	0		; Auto-detect number of floppy drives
 						;   use only for DIP switch-less PCs!
+	IFNDEF POST_ERR_WAIT
 POST_ERR_WAIT	=	1		; Wait for Any Key press to continue if
 						;   there is a POST error
+	ENDIF
 INT_19_BOOT_HD	=	0		; Try IPL to floppy then hard drive (80h)
 SW1_FLP		=	11b		; Default SW1 floppy drives value
 MDA_ATTR		=	1		; Display MDA character attributes

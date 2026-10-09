@@ -6,6 +6,9 @@ A standard or Turbo GLaBIOS build does not run on this board. GLaBIOS already ha
 `ARCH_TYPE=ARCH_FE2010` with `ARCH_SUB_TYPE=ARCH_M88`. It configures the FE2010A through port 63h,
 skips the timer 1 test, disables DRAM refresh (the board uses SRAM) and boots at 9.54 MHz.
 
+The ROMs here are built with `POST_ERR_WAIT=0`: a POST error such as `1000 FDC` (no floppy
+controller installed) is shown, but the BIOS keeps booting instead of waiting for a key.
+
 ## Files
 
 | File | Purpose |
