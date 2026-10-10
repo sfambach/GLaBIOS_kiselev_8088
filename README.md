@@ -4,6 +4,10 @@ A modern, scratch-built, open-source alternative BIOS for vintage PC, XT, 8088 C
 
 Copyright &copy; 2022-2026, [640KB](mailto:640kb@glabios.org) and contributors.
 
+## AI disclosure
+
+This fork adds a build for the Sergey Kiselev Micro 8088 (`micro_8088/`). Those additions were made with AI assistance: written largely by Claude (Anthropic) via Claude Code, specified, reviewed and tested by Stefan Fambach. GLaBIOS itself is the work of 640KB and contributors.
+
 ## Version 0.8 (beta):
 
 #### Featuring complete [Extended Keyboard support](https://github.com/640-KB/GLaBIOS/wiki/GLaBIOS-Extended-Keyboard-Support) and more!
