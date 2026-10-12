@@ -1,0 +1,27 @@
+diff --git a/src/config.inc b/src/config.inc
+index 05c8d87..7bc766b 100644
+--- a/src/config.inc
++++ b/src/config.inc
+@@ -63,6 +63,7 @@
+ %define MAX_RAM_SIZE	640		; Scan this much memory during POST
+ %define RAM_TEST_BLOCK	16384		; block size for RAM test
+ %define PIT_DELAY			; Use PIT polling for delays
++%define KBD_ENHANCED			; Report 101/102-key keyboard (40:96h bit 4)
+ %endif ; MACHINE_FE2010A
+ 
+ ; Settings for Book8088
+diff --git a/src/keyboard.inc b/src/keyboard.inc
+index 534e409..90e18d5 100644
+--- a/src/keyboard.inc
++++ b/src/keyboard.inc
+@@ -624,4 +624,10 @@ kbd_buffer_init:
+ 	mov	word [kbd_flags_2],ax
+ 	mov	word [kbd_flags_3],ax
+ 	mov	word [kbd_flags_4],ax
++%ifdef KBD_ENHANCED
++; The on-board AT to XT converter passes 101/102-key codes (E0 prefix),
++; but an XT keyboard interface cannot report the keyboard type.
++; Without this flag KEYB ignores the <> key (scan code 56h).
++	mov	byte [kbd_flags_3],10h	; 101/102-key keyboard installed
++%endif ; KBD_ENHANCED
+ 	ret
