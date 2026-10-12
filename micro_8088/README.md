@@ -9,6 +9,21 @@ skips the timer 1 test, disables DRAM refresh (the board uses SRAM) and boots at
 The ROMs here are built with `POST_ERR_WAIT=0`: a POST error such as `1000 FDC` (no floppy
 controller installed) is shown, but the BIOS keeps booting instead of waiting for a key.
 
+The `ARCH_M88` preset in `src/GLABIOS.ASM` also has these changes for this board:
+
+- `KB_EXT_FLAG=1`: POST sets bit 4 of `40:96h` (101/102-key keyboard installed). The on-board
+  AT to XT converter passes the extended keys (E0 prefix, DIP SW2.3 = ON), but an XT keyboard
+  interface cannot report the keyboard type. Without the flag, `KEYB GR` ignores the `<>` key (56h).
+- `RAM_TEST_LONG=0`, `POST_TEST_FD=0`, `POST_TEST_SEEK=0`: faster boot. The board has SRAM, and
+  often no floppy controller.
+
+## Sergey's BIOS with the same keyboard fix
+
+`kiselev_bios/` builds the lower flash half (JP1 open) from
+[8088_bios](https://github.com/skiselev/8088_bios) with `enhanced-keyboard.patch`. The patch
+sets the same `40:96h` bit at POST. `build.sh` takes the XTIDE ROM to bundle (for example the
+first 8 KiB of an existing image) and writes `roms/KISELEV_M88_XTIDE.ROM` for `mkflash.py --base`.
+
 ## Files
 
 | File | Purpose |
@@ -17,6 +32,8 @@ controller installed) is shown, but the BIOS keeps booting instead of waiting fo
 | `roms/GLABIOS_M88_CPU_V20.ROM` | 8 KiB GLaBIOS for NEC V20 |
 | `build.sh` | Rebuilds both ROMs with [JWasm](https://github.com/Baron-von-Riedesel/JWasm) |
 | `mkflash.py` | Builds a 128 KiB image for the SST39SF010A flash |
+| `kiselev_bios/` | Patch and build script for Sergey's BIOS (lower flash half) |
+| `roms/KISELEV_M88_XTIDE.ROM` | Lower flash half: Sergey's BIOS 1.0.2 with keyboard fix and XTIDE r624 |
 
 ## Flash layout
 

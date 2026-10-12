@@ -279,6 +279,7 @@ MDA_ATTR		=	1		; Display MDA character attributes
 LIGHT_PEN		=	1		; INT 10h,4 light pen support
 EXP_UNIT		=	0		; Init 5161 I/O Expansion Unit
 KB_FILTER_SC	=	0		; Filter KB make/break code >= 70h
+KB_EXT_FLAG		=	0		; Report 101/102 keyboard in BDA (40:96h bit 4)
 INIT_AT_KBC		=	0		; Init AT type KB controller
 INIT_V40		=	0		; Init V40 config registers
 OEM_FONT		=	0		; 1=use OEM style font, 0=clone style
@@ -458,6 +459,11 @@ DRAM_REFRESH	=	0			; disable DRAM refresh (for SRAM)
 RAM_PARITY		=	0			; disable memory parity check
 CGA_SNOW_REMOVE	=	0			; disable snow removal
 FE_CPU_CFG		=	110b			; boot to 9.54 MHz, 2 RAM WS
+KB_EXT_FLAG		=	1			; on-board AT2XT converter, so KEYB
+							;  uses the 102nd key (56h)
+RAM_TEST_LONG	=	0			; SRAM, skip long RAM test
+POST_TEST_FD	=	0			; no floppy test (often no FDC)
+POST_TEST_SEEK	=	0			; no floppy seek on POST
 	ENDIF
 	ENDIF
 
@@ -4903,6 +4909,10 @@ POST_KB_RESET PROC
 	STOSW
 	MOV	AL, KB_BUF_END_B			; (AH already 00)
 	STOSW						; DI = KB_BUF_ST + 4
+			IF KB_EXT_FLAG EQ 1
+	MOV	BYTE PTR ES:[EKB_FLAGS1], MASK KEEN	; tell KEYB a 101/102
+							;  key keyboard is installed
+			ENDIF
 
 			IF KB_RESET EQ 1
 ;----------------------------------------------------------------------------;
