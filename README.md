@@ -8,6 +8,12 @@ Copyright &copy; 2022-2026, [640KB](mailto:640kb@glabios.org) and contributors.
 
 This fork adds a build for the Sergey Kiselev Micro 8088 (`micro_8088/`). Those additions were made with AI assistance: written largely by Claude (Anthropic) via Claude Code, specified, reviewed and tested by Stefan Fambach. GLaBIOS itself is the work of 640KB and contributors.
 
+## Authors
+
+- **640KB** and contributors – GLaBIOS (upstream)
+- **Stefan Fambach** (SteFam) – idea and concept of the Micro 8088 build, review and testing – https://www.fambach.net
+- **Claude** (Anthropic AI) – implementation of the Micro 8088 build, via Claude Code
+
 ## Version 0.8 (beta):
 
 #### Featuring complete [Extended Keyboard support](https://github.com/640-KB/GLaBIOS/wiki/GLaBIOS-Extended-Keyboard-Support) and more!
