@@ -24,6 +24,18 @@ The `ARCH_M88` preset in `src/GLABIOS.ASM` also has these changes for this board
 sets the same `40:96h` bit at POST. `build.sh` takes the XTIDE ROM to bundle (for example the
 first 8 KiB of an existing image) and writes `roms/KISELEV_M88_XTIDE.ROM` for `mkflash.py --base`.
 
+`setup-menu.patch` replaces the command line setup (F1 during POST) with one page:
+
+- Date and time (when the BIOS detects an RTC), floppy drives A and B, CPU clock, fast wait
+  states, memory test, ROM scan of F0000-F7FFF.
+- IDE drives C: and D: as the XTIDE Universal BIOS installed them: geometry (INT 13h function
+  08h) and size. The drive model is not shown: XTIDE has no INT 13h function to read it (25h).
+- Up/Down selects, Left/Right, +/- or Space change a value, Enter edits date or time.
+  F10 saves to the flash, Esc leaves without saving. Date and time are written to the RTC right
+  after Enter, as in the old setup.
+
+Tested in QEMU with a test harness (SeaBIOS plus XTIDE Universal BIOS r638), not yet on the board.
+
 ## Files
 
 | File | Purpose |
@@ -32,8 +44,8 @@ first 8 KiB of an existing image) and writes `roms/KISELEV_M88_XTIDE.ROM` for `m
 | `roms/GLABIOS_M88_CPU_V20.ROM` | 8 KiB GLaBIOS for NEC V20 |
 | `build.sh` | Rebuilds both ROMs with [JWasm](https://github.com/Baron-von-Riedesel/JWasm) |
 | `mkflash.py` | Builds a 128 KiB image for the SST39SF010A flash |
-| `kiselev_bios/` | Patch and build script for Sergey's BIOS (lower flash half) |
-| `roms/KISELEV_M88_XTIDE.ROM` | Lower flash half: Sergey's BIOS 1.0.2 with keyboard fix and XTIDE r624 |
+| `kiselev_bios/` | Patches and build script for Sergey's BIOS (lower flash half) |
+| `roms/KISELEV_M88_XTIDE.ROM` | Lower flash half: Sergey's BIOS 1.0.2 with keyboard fix, setup page and XTIDE r624 |
 
 ## Flash layout
 
