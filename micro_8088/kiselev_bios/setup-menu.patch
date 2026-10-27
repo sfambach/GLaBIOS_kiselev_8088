@@ -1,0 +1,1169 @@
+diff --git a/src/Makefile b/src/Makefile
+index 5dbea14..a428a24 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -27,7 +27,7 @@ XTIDE_300=../xtide_r625/ide_xt-cf-lite_300h.bin
+ XTIDE_300_V20=../xtide_r625/ide_xtp-cf-lite_300h.bin
+ XTIDE_320=../xtide_r625/ide_xt-cf-lite_320h.bin
+ 
+-SOURCES=bios.asm macro.inc at_kbc.inc config.inc errno.inc flash.inc floppy1.inc floppy2.inc keyboard.inc misc.inc printer1.inc printer2.inc ps2aux.inc scancode.inc serial1.inc serial2.inc setup.inc sound.inc time1.inc time2.inc video.inc cpu.inc messages.inc inttrace.inc rtc.inc fnt00-7F.inc fnt80-FF.inc
++SOURCES=bios.asm macro.inc at_kbc.inc config.inc errno.inc flash.inc floppy1.inc floppy2.inc keyboard.inc misc.inc printer1.inc printer2.inc ps2aux.inc scancode.inc serial1.inc serial2.inc setup.inc setup_menu.inc sound.inc time1.inc time2.inc video.inc cpu.inc messages.inc inttrace.inc rtc.inc fnt00-7F.inc fnt80-FF.inc
+ 
+ IMAGES=bios-micro8088-noide.rom bios-micro8088-xtide.rom bios-sergey-xt-noide.rom bios-sergey-xt-xtide.rom bios-xi8088-noide.rom bios-xi8088-xtide.rom bios-book8088-xtide.rom bios-book8088-xtide-v20.rom bios-xt.bin bios-homebrew8088.bin
+ FLASH_IMAGE=bios-micro8088-xtide.rom
+diff --git a/src/config.inc b/src/config.inc
+index 7bc766b..c262fab 100644
+--- a/src/config.inc
++++ b/src/config.inc
+@@ -64,6 +64,7 @@
+ %define RAM_TEST_BLOCK	16384		; block size for RAM test
+ %define PIT_DELAY			; Use PIT polling for delays
+ %define KBD_ENHANCED			; Report 101/102-key keyboard (40:96h bit 4)
++%define SETUP_MENU			; One page full screen setup utility
+ %endif ; MACHINE_FE2010A
+ 
+ ; Settings for Book8088
+diff --git a/src/setup.inc b/src/setup.inc
+index 191601a..bb7b969 100644
+--- a/src/setup.inc
++++ b/src/setup.inc
+@@ -41,6 +41,9 @@ nvram_fast_ws	equ	10h		; Less wait states for FE2010A
+ 					; (0 - enabled, 1 - disabled)
+ %endif ; BIOS_SETUP
+ 
++%ifdef SETUP_MENU
++%include "setup_menu.inc"
++%else ; SETUP_MENU
+ ;=========================================================================
+ ; nvram_setup - NVRAM configuration utility
+ ; Input:
+@@ -333,20 +336,214 @@ nvram_setup:
+ 
+ %ifdef AT_RTC
+ .set_time:
+-	push	cx
+-	push	di
+-	push	es
+ 	mov	ah,0Eh			; echo
+ 	mov	bx,0007h
+ 	int	10h
+ 	mov	si,msg_crlf
+ 	call	print
+-
+ 	mov	si,msg_set_time
+ 	call	print
++	call	input_time
++	jnc	.set_time_exit
++	mov	si,msg_time_inval
++	call	print
++.set_time_exit:
++	jmp	.menu_loop
+ 
+-	mov	ah,02h
+-	int	1Ah			; get current time
++.set_date:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	mov	si,msg_crlf
++	call	print
++	mov	si,msg_set_date
++	call	print
++	call	input_date
++	jnc	.set_date_exit
++	mov	si,msg_date_inval
++	call	print
++.set_date_exit:
++	jmp	.menu_loop
++
++%endif ; AT_RTC
++
++.set_ext_scan:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	mov	si,msg_crlf
++	call	print
++	mov	si,msg_set_ext
++	call	print
++
++.set_ext_input:
++	mov	ah,00h
++	int	16h
++	cmp	al,0Dh
++	je	.set_ext_exit
++	or	al,20h			; convert to lower case
++	cmp	al,'n'
++	je	.set_ext_disable
++	cmp	al,'y'
++	je	.set_ext_enable
++	jmp	.set_ext_input
++
++.set_ext_disable:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	or	ch,nvram_ext_scan	; bit set = disable scan
++	jmp	.set_ext_exit
++
++.set_ext_enable:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	and	ch,~nvram_ext_scan	; bit clear = enable scan
++	jmp	.set_ext_exit
++
++.set_ext_exit:
++	mov	si,msg_crlf
++	call	print
++	jmp	.menu_loop
++
++.set_mem_test:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	mov	si,msg_crlf
++	call	print
++	mov	si,msg_set_mem_tst
++	call	print
++
++.set_mem_test_input:
++	mov	ah,00h
++	int	16h
++	cmp	al,0Dh
++	je	.set_mem_test_exit
++	or	al,20h			; convert to lower case
++	cmp	al,'n'
++	je	.set_mem_test_disable
++	cmp	al,'y'
++	je	.set_mem_test_enable
++	jmp	.set_mem_test_input
++
++.set_mem_test_disable:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	or	ch,nvram_mem_test	; bit set = disable test
++	jmp	.set_mem_test_exit
++
++.set_mem_test_enable:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	and	ch,~nvram_mem_test	; bit clear = enable test
++	jmp	.set_mem_test_exit
++
++.set_mem_test_exit:
++	mov	si,msg_crlf
++	call	print
++	jmp	.menu_loop
++
++%ifdef MACHINE_FE2010A
++.set_ws:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	mov	si,msg_crlf
++	call	print
++.set_ws_loop:
++	mov	si,msg_set_ws
++	call	print
++
++.set_ws_input:
++	mov	ah,00h
++	int	16h
++	cmp	al,0Dh
++	je	.set_ws_exit
++	or	al,20h			; convert to lower case
++	cmp	al,'n'
++	je	.set_ws_disable
++	cmp	al,'y'
++	je	.set_ws_enable
++	cmp	al,'h'
++	je	.set_ws_help
++	jmp	.set_ws_input
++
++.set_ws_disable:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	or	ch,nvram_fast_ws	; bit set = fast waitstates
++	jmp	.set_ws_exit
++
++.set_ws_enable:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	and	ch,~nvram_fast_ws	; bit clear = normal waitstates
++	jmp	.set_ws_exit
++
++.set_ws_help:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++	mov	si,msg_ws_help
++	call	print
++	jmp	.set_ws_loop
++
++.set_ws_exit:
++	mov	si,msg_crlf
++	call	print
++	jmp	.menu_loop
++%endif ; MACHINE_FE2010A
++
++.save:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++
++%ifdef AT_RTC_NVRAM
++	call	nvram_save
++%endif ; AT_RTC_NVRAM
++%ifdef FLASH_NVRAM
++	call	flash_save
++%endif ; FLASH_NVRAM
++	call	detect_floppy		; set floppies in equipment_list
++	jmp	.exit
++
++.no_save:
++	mov	ah,0Eh			; echo
++	mov	bx,0007h
++	int	10h
++
++.exit:
++	mov	si,msg_crlf
++	call	print
++	pop	si
++	pop	dx
++	pop	cx
++	pop	bx
++	pop	ax
++	ret
++
++%endif ; SETUP_MENU
++
++%ifdef AT_RTC
++;=========================================================================
++; input_time - read a time (hh:mm:ss) from the console, set the RTC
++; Output:
++;	CF set if the input is invalid (RTC unchanged)
++;-------------------------------------------------------------------------
++input_time:
++	push	ax
++	push	bx
++	push	cx
++	push	dx
++	push	di
++	push	es
+ 
+ 	mov 	ax,07C0h		; use 07C0:0000 as a buffer
+ 	mov	es,ax
+@@ -403,27 +600,32 @@ nvram_setup:
+ 	call	set_system_timer		; set timer variables to RTC time
+ 
+ .set_time_exit:
++	clc
++.set_time_ret:
+ 	pop	es
+ 	pop	di
++	pop	dx
+ 	pop	cx
+-	jmp	.menu_loop
++	pop	bx
++	pop	ax
++	ret
+ 
+ .set_time_invalid:
+-	mov	si,msg_time_inval
+-	call	print
+-	jmp	.set_time_exit
++	stc
++	jmp	.set_time_ret
+ 
+-.set_date:
++;=========================================================================
++; input_date - read a date (YYYY-MM-DD) from the console, set the RTC
++; Output:
++;	CF set if the input is invalid (RTC unchanged)
++;-------------------------------------------------------------------------
++input_date:
++	push	ax
++	push	bx
+ 	push	cx
++	push	dx
+ 	push	di
+ 	push	es
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	mov	si,msg_crlf
+-	call	print
+-	mov	si,msg_set_date
+-	call	print
+ 
+ 	mov 	ax,07C0h		; use 07C0:0000 as a buffer
+ 	mov	es,ax
+@@ -531,180 +733,22 @@ nvram_setup:
+ 	int	1Ah
+ 
+ .set_date_exit:
++	clc
++.set_date_ret:
+ 	pop	es
+ 	pop	di
+-	pop	cx
+-	jmp	.menu_loop
+-
+-.set_date_invalid:
+-	mov	si,msg_date_inval
+-	call	print
+-	jmp	.set_date_exit
+-
+-%endif ; AT_RTC
+-
+-.set_ext_scan:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	mov	si,msg_crlf
+-	call	print
+-	mov	si,msg_set_ext
+-	call	print
+-
+-.set_ext_input:
+-	mov	ah,00h
+-	int	16h
+-	cmp	al,0Dh
+-	je	.set_ext_exit
+-	or	al,20h			; convert to lower case
+-	cmp	al,'n'
+-	je	.set_ext_disable
+-	cmp	al,'y'
+-	je	.set_ext_enable
+-	jmp	.set_ext_input
+-
+-.set_ext_disable:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	or	ch,nvram_ext_scan	; bit set = disable scan
+-	jmp	.set_ext_exit
+-
+-.set_ext_enable:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	and	ch,~nvram_ext_scan	; bit clear = enable scan
+-	jmp	.set_ext_exit
+-
+-.set_ext_exit:
+-	mov	si,msg_crlf
+-	call	print
+-	jmp	.menu_loop
+-
+-.set_mem_test:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	mov	si,msg_crlf
+-	call	print
+-	mov	si,msg_set_mem_tst
+-	call	print
+-
+-.set_mem_test_input:
+-	mov	ah,00h
+-	int	16h
+-	cmp	al,0Dh
+-	je	.set_mem_test_exit
+-	or	al,20h			; convert to lower case
+-	cmp	al,'n'
+-	je	.set_mem_test_disable
+-	cmp	al,'y'
+-	je	.set_mem_test_enable
+-	jmp	.set_mem_test_input
+-
+-.set_mem_test_disable:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	or	ch,nvram_mem_test	; bit set = disable test
+-	jmp	.set_mem_test_exit
+-
+-.set_mem_test_enable:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	and	ch,~nvram_mem_test	; bit clear = enable test
+-	jmp	.set_mem_test_exit
+-
+-.set_mem_test_exit:
+-	mov	si,msg_crlf
+-	call	print
+-	jmp	.menu_loop
+-
+-%ifdef MACHINE_FE2010A
+-.set_ws:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	mov	si,msg_crlf
+-	call	print
+-.set_ws_loop:
+-	mov	si,msg_set_ws
+-	call	print
+-
+-.set_ws_input:
+-	mov	ah,00h
+-	int	16h
+-	cmp	al,0Dh
+-	je	.set_ws_exit
+-	or	al,20h			; convert to lower case
+-	cmp	al,'n'
+-	je	.set_ws_disable
+-	cmp	al,'y'
+-	je	.set_ws_enable
+-	cmp	al,'h'
+-	je	.set_ws_help
+-	jmp	.set_ws_input
+-
+-.set_ws_disable:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	or	ch,nvram_fast_ws	; bit set = fast waitstates
+-	jmp	.set_ws_exit
+-
+-.set_ws_enable:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	and	ch,~nvram_fast_ws	; bit clear = normal waitstates
+-	jmp	.set_ws_exit
+-
+-.set_ws_help:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-	mov	si,msg_ws_help
+-	call	print
+-	jmp	.set_ws_loop
+-
+-.set_ws_exit:
+-	mov	si,msg_crlf
+-	call	print
+-	jmp	.menu_loop
+-%endif ; MACHINE_FE2010A
+-
+-.save:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-
+-%ifdef AT_RTC_NVRAM
+-	call	nvram_save
+-%endif ; AT_RTC_NVRAM
+-%ifdef FLASH_NVRAM
+-	call	flash_save
+-%endif ; FLASH_NVRAM
+-	call	detect_floppy		; set floppies in equipment_list
+-	jmp	.exit
+-
+-.no_save:
+-	mov	ah,0Eh			; echo
+-	mov	bx,0007h
+-	int	10h
+-
+-.exit:
+-	mov	si,msg_crlf
+-	call	print
+-	pop	si
+ 	pop	dx
+ 	pop	cx
+ 	pop	bx
+ 	pop	ax
+ 	ret
+ 
++.set_date_invalid:
++	stc
++	jmp	.set_date_ret
++
++%endif ; AT_RTC
++
+ ;=========================================================================
+ ; get_line - read an ASCIIZ string from the console
+ ; Input:
+diff --git a/src/setup_menu.inc b/src/setup_menu.inc
+new file mode 100644
+index 0000000..bcd0c4b
+--- /dev/null
++++ b/src/setup_menu.inc
+@@ -0,0 +1,669 @@
++;=========================================================================
++; setup_menu.inc - One page full screen BIOS setup utility
++;-------------------------------------------------------------------------
++;
++; Replaces the command line setup when SETUP_MENU is defined. All settings
++; are on one page: the cursor keys select and change a value, Enter edits
++; the date or time, F10 saves to the Flash ROM, Esc leaves without saving.
++; The IDE section lists the drives that the XTIDE Universal BIOS installed
++; (INT 13h, drives 80h and 81h), so the setup needs no knowledge of the
++; IDE controller.
++;
++; This program is free software: you can redistribute it and/or modify
++; it under the terms of the GNU General Public License as published by
++; the Free Software Foundation, either version 3 of the License, or
++; (at your option) any later version.
++;
++;=========================================================================
++
++%ifndef FLASH_NVRAM
++%error SETUP_MENU needs FLASH_NVRAM
++%endif
++%ifndef AT_RTC
++%error SETUP_MENU needs AT_RTC
++%endif
++%ifndef TURBO_MODE
++%error SETUP_MENU needs TURBO_MODE
++%endif
++
++menu_row_items	equ	4		; screen row of the first setting
++menu_row_ide	equ	14		; screen row of the IDE section
++menu_row_status	equ	20		; screen row for error messages
++menu_row_help	equ	22		; screen row of the key help
++menu_col_label	equ	2		; screen column of the labels
++menu_col_value	equ	30		; screen column of the values
++menu_val_width	equ	22		; width of the highlighted value field
++menu_attr_norm	equ	07h		; normal text
++menu_attr_sel	equ	70h		; selected value (inverse)
++
++mi_date		equ	0		; setting numbers = rows on the page
++mi_time		equ	1
++mi_fd_a		equ	2
++mi_fd_b		equ	3
++mi_clock	equ	4
++mi_ws		equ	5
++mi_mem		equ	6
++mi_scan		equ	7
++menu_items	equ	8
++
++; Stack frame of nvram_setup, addressed with BP (SS segment)
++m_config	equ	-1		; byte - BIOS configuration byte A
++m_floppy	equ	-2		; byte - floppy drive types
++m_select	equ	-3		; byte - selected setting
++m_rtc		equ	-4		; byte - 1 = RTC present
++
++menu_hdd_count	equ	75h		; byte - number of hard disks (BIOS data area)
++menu_cursor_type equ	60h		; word - cursor shape (BIOS data area)
++
++;=========================================================================
++; nvram_setup - full screen setup utility
++; Input:
++;	none
++; Output:
++;	none
++;-------------------------------------------------------------------------
++nvram_setup:
++	push	ax
++	push	bx
++	push	cx
++	push	dx
++	push	si
++	push	di
++	push	bp
++	mov	bp,sp
++	sub	sp,4
++
++	call	get_config_a
++	mov	byte [bp+m_config],al
++	call	get_floppy
++	mov	byte [bp+m_floppy],al
++	mov	byte [bp+m_select],mi_fd_a
++	mov	byte [bp+m_rtc],0
++	call	rtc_detect
++	jc	.draw_page
++	mov	byte [bp+m_rtc],1
++	mov	byte [bp+m_select],mi_date
++
++.draw_page:
++	mov	ah,01h			; hide the cursor
++	mov	cx,2000h
++	call	menu_int10
++	call	menu_draw_page
++
++.draw_values:
++	call	menu_draw_values
++
++.read_key:
++	mov	ah,00h
++	int	16h
++	cmp	al,1Bh			; Esc
++	je	.exit
++	cmp	ax,4400h		; F10
++	je	.save
++	cmp	al,0Dh			; Enter
++	je	.edit
++	mov	dl,1			; DL = step for the change keys
++	cmp	al,' '
++	je	.change
++	cmp	al,'+'
++	je	.change
++	mov	dl,-1
++	cmp	al,'-'
++	je	.change
++	or	al,al			; cursor keys have AL = 0 or E0h
++	jz	.cursor_key
++	cmp	al,0E0h
++	jne	.read_key
++
++.cursor_key:
++	cmp	ah,48h			; Up
++	je	.up
++	cmp	ah,50h			; Down
++	je	.down
++	cmp	ah,4Bh			; Left
++	je	.change
++	mov	dl,1
++	cmp	ah,4Dh			; Right
++	je	.change
++	jmp	.read_key
++
++.up:
++	mov	al,mi_fd_a		; first setting without RTC
++	cmp	byte [bp+m_rtc],0
++	je	.up_check
++	mov	al,mi_date
++.up_check:
++	cmp	byte [bp+m_select],al
++	je	.read_key
++	dec	byte [bp+m_select]
++	jmp	.draw_values
++
++.down:
++	cmp	byte [bp+m_select],menu_items-1
++	je	.read_key
++	inc	byte [bp+m_select]
++	jmp	.draw_values
++
++.change:
++	mov	al,byte [bp+m_select]
++	cmp	al,mi_fd_a
++	jb	.read_key		; date and time are edited with Enter
++	je	.change_fd_a
++	cmp	al,mi_fd_b
++	je	.change_fd_b
++	cmp	al,mi_clock
++	je	.change_clock
++	mov	ah,nvram_fast_ws
++	cmp	al,mi_ws
++	je	.toggle
++	mov	ah,nvram_mem_test
++	cmp	al,mi_mem
++	je	.toggle
++	mov	ah,nvram_ext_scan
++
++.toggle:
++	xor	byte [bp+m_config],ah
++	jmp	.draw_values
++
++.change_clock:
++	mov	al,byte [bp+m_config]
++	and	al,nvram_trbo_mask
++	add	al,dl
++	jns	.clock_max
++	mov	al,2			; below 4.77 MHz wraps to 9.55 MHz
++.clock_max:
++	cmp	al,2
++	jbe	.clock_set
++	xor	al,al			; above 9.55 MHz wraps to 4.77 MHz
++.clock_set:
++	and	byte [bp+m_config],~nvram_trbo_mask
++	or	byte [bp+m_config],al
++	jmp	.draw_values
++
++.change_fd_a:
++	mov	al,byte [bp+m_floppy]
++	mov	cl,4
++	shr	al,cl
++	call	menu_next_floppy
++	shl	al,cl
++	and	byte [bp+m_floppy],0Fh
++	or	byte [bp+m_floppy],al
++	jmp	.draw_values
++
++.change_fd_b:
++	mov	al,byte [bp+m_floppy]
++	and	al,0Fh
++	call	menu_next_floppy
++	and	byte [bp+m_floppy],0F0h
++	or	byte [bp+m_floppy],al
++	jmp	.draw_values
++
++.edit:
++	mov	al,byte [bp+m_select]
++	cmp	al,mi_time
++	ja	.read_key
++	mov	dh,menu_row_items
++	add	dh,al
++	mov	dl,menu_col_value
++	mov	bl,menu_attr_sel
++	mov	cx,menu_val_width
++	call	menu_fill		; empty the field for the input
++	call	menu_set_cursor
++	cmp	byte [bp+m_select],mi_time
++	je	.edit_time
++	call	input_date
++	mov	si,msg_date_inval
++	jmp	.edit_done
++.edit_time:
++	call	input_time
++	mov	si,msg_time_inval
++.edit_done:
++	pushf
++	call	menu_draw_page		; input echo moved the cursor
++	call	menu_draw_values
++	popf
++	jnc	.read_key
++	mov	dx,(menu_row_status << 8) | menu_col_label
++	call	menu_set_cursor
++	call	print
++	jmp	.read_key
++
++.save:
++	mov	al,' '			; clear an old error message
++	mov	bl,menu_attr_norm
++	mov	cx,76
++	mov	dx,(menu_row_status << 8) | menu_col_label
++	call	menu_fill
++	mov	dh,menu_row_status-1	; the message starts with CR LF
++	mov	dl,0
++	call	menu_set_cursor
++	mov	ch,byte [bp+m_config]
++	mov	cl,byte [bp+m_floppy]
++	call	flash_save
++	call	detect_floppy		; set floppies in equipment_list
++
++.exit:
++	mov	ah,01h			; restore the cursor shape
++	mov	cx,word [menu_cursor_type]
++	call	menu_int10
++	mov	dx,(24 << 8) | 0	; boot messages continue below the page
++	call	menu_set_cursor
++	mov	si,msg_crlf
++	call	print
++	mov	sp,bp
++	pop	bp
++	pop	di
++	pop	si
++	pop	dx
++	pop	cx
++	pop	bx
++	pop	ax
++	ret
++
++;=========================================================================
++; menu_next_floppy - step to the next or previous floppy drive type
++; Input:
++;	AL - floppy drive type
++;	DL - 1 = next type, -1 (0FFh) = previous type
++; Output:
++;	AL - new floppy drive type (skips the unused types 5 and 7)
++;-------------------------------------------------------------------------
++menu_next_floppy:
++	add	al,dl
++	and	al,07h
++	cmp	al,5
++	je	menu_next_floppy
++	cmp	al,7
++	je	menu_next_floppy
++	ret
++
++;=========================================================================
++; menu_draw_page - clear the screen, draw labels, IDE drives and key help
++; Input:
++;	BP - nvram_setup stack frame
++;-------------------------------------------------------------------------
++menu_draw_page:
++	push	ax
++	push	bx
++	push	cx
++	push	dx
++	push	si
++
++	mov	ax,0600h		; clear the screen
++	mov	bh,menu_attr_norm
++	xor	cx,cx
++	mov	dx,184Fh
++	call	menu_int10
++
++	mov	si,menu_texts
++.text_loop:
++    cs	mov	dx,word [si]		; DH = row, DL = column
++	cmp	dx,0FFFFh
++	je	.lines
++	call	menu_set_cursor
++	push	si
++    cs	mov	si,word [si+2]
++	call	print
++	pop	si
++	add	si,4
++	jmp	.text_loop
++
++.lines:
++	mov	al,0C4h			; horizontal line character
++	mov	bl,menu_attr_norm
++	mov	cx,76
++	mov	dx,(2 << 8) | menu_col_label
++	call	menu_fill
++	mov	dh,menu_row_ide-2
++	call	menu_fill
++	mov	dh,menu_row_status-1
++	call	menu_fill
++
++	mov	dx,((menu_row_ide+1) << 8) | menu_col_value
++	mov	al,80h
++	call	menu_draw_drive
++	inc	dh
++	mov	al,81h
++	call	menu_draw_drive
++
++	pop	si
++	pop	dx
++	pop	cx
++	pop	bx
++	pop	ax
++	ret
++
++;=========================================================================
++; menu_draw_drive - print geometry and size of a hard disk drive
++; Input:
++;	AL - drive number (80h or 81h)
++;	DH, DL - screen row and column
++; Notes:
++;	The geometry is what the XTIDE Universal BIOS reports with INT 13h
++;	function 08h. It has no function to read the drive model (25h).
++;-------------------------------------------------------------------------
++menu_draw_drive:
++	push	ax
++	push	bx
++	push	cx
++	push	dx
++	push	si
++	push	di
++
++	call	menu_set_cursor
++	mov	bl,al
++	and	bl,7Fh			; drive index
++	cmp	bl,byte [menu_hdd_count]
++	jb	.present
++	mov	si,msg_none
++	call	print
++	jmp	.exit
++
++.present:
++	mov	dl,al			; DL = drive number
++	mov	ah,08h			; get drive parameters
++	push	bp
++	int	13h
++	pop	bp
++	jc	.exit
++
++	mov	ah,cl			; cylinders = CL[7:6]:CH + 1
++	push	cx
++	mov	cl,6
++	shr	ah,cl
++	pop	cx
++	mov	al,ch
++	inc	ax
++	mov	si,ax			; SI = cylinders
++	mov	al,cl
++	and	ax,003Fh
++	mov	di,ax			; DI = sectors per track
++	mov	al,dh
++	xor	ah,ah
++	inc	ax
++	mov	cx,ax			; CX = heads
++
++	push	si
++	mov	si,msg_menu_chs
++	call	print
++	pop	si
++	mov	ax,si
++	call	print_dec
++	mov	al,'/'
++	call	menu_print_char
++	mov	ax,cx
++	call	print_dec
++	mov	al,'/'
++	call	menu_print_char
++	mov	ax,di
++	call	print_dec
++	mov	al,','
++	call	menu_print_char
++	mov	al,' '
++	call	menu_print_char
++
++	mov	ax,si
++	mul	cx			; DX:AX = cylinders * heads
++	mov	bx,dx
++	mul	di			; DX:AX = low word * sectors
++	push	ax
++	push	dx
++	mov	ax,bx
++	mul	di			; AX = high word * sectors
++	pop	dx
++	add	dx,ax
++	pop	ax			; DX:AX = sectors
++	mov	cx,11			; 2048 sectors per MiB
++.mib:
++	shr	dx,1
++	rcr	ax,1
++	loop	.mib
++	call	print_dec
++	mov	si,msg_menu_mib
++	call	print
++
++.exit:
++	pop	di
++	pop	si
++	pop	dx
++	pop	cx
++	pop	bx
++	pop	ax
++	ret
++
++;=========================================================================
++; menu_draw_values - draw all setting values, the selected one inverse
++; Input:
++;	BP - nvram_setup stack frame
++;-------------------------------------------------------------------------
++menu_draw_values:
++	push	ax
++	push	bx
++	push	cx
++	push	dx
++	push	si
++
++	xor	cx,cx			; CL = setting number
++.value_loop:
++	push	cx
++	mov	dh,menu_row_items
++	add	dh,cl
++	mov	dl,menu_col_value
++	mov	bl,menu_attr_norm
++	cmp	cl,byte [bp+m_select]
++	jne	.fill
++	mov	bl,menu_attr_sel
++.fill:
++	mov	al,' '
++	mov	cx,menu_val_width
++	call	menu_fill
++	call	menu_set_cursor
++	pop	cx
++	push	cx
++	mov	bl,cl
++	xor	bh,bh
++	shl	bx,1
++    cs	call	word [menu_value_tbl+bx]
++	pop	cx
++	inc	cl
++	cmp	cl,menu_items
++	jb	.value_loop
++
++	pop	si
++	pop	dx
++	pop	cx
++	pop	bx
++	pop	ax
++	ret
++
++; Value printers called by menu_draw_values; BP - nvram_setup stack frame
++menu_value_date:
++	cmp	byte [bp+m_rtc],0
++	je	menu_value_no_rtc
++	mov	ah,04h			; read RTC date
++	int	1Ah
++	mov	al,ch			; century
++	call	print_byte
++	mov	al,cl			; year
++	call	print_byte
++	mov	al,'-'
++	call	menu_print_char
++	mov	al,dh			; month
++	call	print_byte
++	mov	al,'-'
++	call	menu_print_char
++	mov	al,dl			; day
++	jmp	print_byte
++
++menu_value_time:
++	cmp	byte [bp+m_rtc],0
++	je	menu_value_no_rtc
++	mov	ah,02h			; read RTC time
++	int	1Ah
++	mov	al,ch			; hours
++	call	print_byte
++	mov	al,':'
++	call	menu_print_char
++	mov	al,cl			; minutes
++	call	print_byte
++	mov	al,':'
++	call	menu_print_char
++	mov	al,dh			; seconds
++	jmp	print_byte
++
++menu_value_no_rtc:
++	mov	si,msg_menu_no_rtc
++	jmp	print
++
++menu_value_fd_a:
++	mov	al,byte [bp+m_floppy]
++	mov	cl,4
++	shr	al,cl
++	jmp	menu_print_floppy
++
++menu_value_fd_b:
++	mov	al,byte [bp+m_floppy]
++menu_print_floppy:
++	mov	bl,al
++	and	bx,0007h
++	shl	bx,1
++    cs	mov	si,word [tbl_floppy+bx]
++	jmp	print
++
++menu_value_clock:
++	mov	al,byte [bp+m_config]
++	jmp	print_cpu_clk
++
++menu_value_ws:
++	mov	al,nvram_fast_ws
++	jmp	menu_print_enabled
++
++menu_value_mem:
++	mov	al,nvram_mem_test
++	jmp	menu_print_enabled
++
++menu_value_scan:
++	mov	al,nvram_ext_scan
++menu_print_enabled:
++	mov	si,msg_enabled		; bit clear = enabled
++	test	byte [bp+m_config],al
++	jz	.print
++	mov	si,msg_disabled
++.print:
++	jmp	print
++
++;=========================================================================
++; menu_print_char - print a character at the cursor
++; Input:
++;	AL - character
++;-------------------------------------------------------------------------
++menu_print_char:
++	push	ax
++	push	bx
++	mov	ah,0Eh
++	mov	bx,0007h
++	call	menu_int10
++	pop	bx
++	pop	ax
++	ret
++
++;=========================================================================
++; menu_set_cursor - move the cursor (page 0)
++; Input:
++;	DH, DL - row, column
++;-------------------------------------------------------------------------
++menu_set_cursor:
++	push	ax
++	push	bx
++	mov	ah,02h
++	xor	bh,bh
++	call	menu_int10
++	pop	bx
++	pop	ax
++	ret
++
++;=========================================================================
++; menu_fill - write a character repeatedly with an attribute (page 0)
++; Input:
++;	AL - character
++;	BL - attribute
++;	CX - count
++;	DH, DL - row, column of the first character
++;-------------------------------------------------------------------------
++menu_fill:
++	push	ax
++	push	bx
++	call	menu_set_cursor
++	mov	ah,09h
++	xor	bh,bh
++	call	menu_int10
++	pop	bx
++	pop	ax
++	ret
++
++;=========================================================================
++; menu_int10 - INT 10h that keeps BP (some video BIOSes change it)
++;-------------------------------------------------------------------------
++menu_int10:
++	push	bp
++	int	10h
++	pop	bp
++	ret
++
++menu_value_tbl	dw	menu_value_date
++		dw	menu_value_time
++		dw	menu_value_fd_a
++		dw	menu_value_fd_b
++		dw	menu_value_clock
++		dw	menu_value_ws
++		dw	menu_value_mem
++		dw	menu_value_scan
++
++menu_texts	db	menu_col_label, 1
++		dw	msg_menu_title
++		db	menu_col_label, menu_row_items+mi_date
++		dw	msg_menu_date
++		db	menu_col_label, menu_row_items+mi_time
++		dw	msg_menu_time
++		db	menu_col_label, menu_row_items+mi_fd_a
++		dw	msg_menu_fd_a
++		db	menu_col_label, menu_row_items+mi_fd_b
++		dw	msg_menu_fd_b
++		db	menu_col_label, menu_row_items+mi_clock
++		dw	msg_menu_clock
++		db	menu_col_label, menu_row_items+mi_ws
++		dw	msg_menu_ws
++		db	menu_col_label, menu_row_items+mi_mem
++		dw	msg_menu_mem
++		db	menu_col_label, menu_row_items+mi_scan
++		dw	msg_menu_scan
++		db	menu_col_label, menu_row_ide
++		dw	msg_menu_ide
++		db	menu_col_label, menu_row_ide+1
++		dw	msg_menu_drive_c
++		db	menu_col_label, menu_row_ide+2
++		dw	msg_menu_drive_d
++		db	menu_col_label, menu_row_help
++		dw	msg_menu_help_1
++		db	menu_col_label, menu_row_help+1
++		dw	msg_menu_help_2
++		dw	0FFFFh
++
++msg_menu_title	db	'BIOS Setup Utility - Micro 8088 BIOS ', VERSION, 00h
++msg_menu_date	db	'Date (YYYY-MM-DD)', 00h
++msg_menu_time	db	'Time (hh:mm:ss)', 00h
++msg_menu_fd_a	db	'Floppy drive A:', 00h
++msg_menu_fd_b	db	'Floppy drive B:', 00h
++msg_menu_clock	db	'CPU clock frequency', 00h
++msg_menu_ws	db	'Fast wait states', 00h
++msg_menu_mem	db	'Memory test', 00h
++msg_menu_scan	db	'ROM scan F0000-F7FFF', 00h
++msg_menu_ide	db	'IDE drives (detected by XTIDE Universal BIOS)', 00h
++msg_menu_drive_c db	'Drive C: (80h)', 00h
++msg_menu_drive_d db	'Drive D: (81h)', 00h
++msg_menu_help_1	db	'Up/Down: select   Left/Right, +/-, Space: change   '
++		db	'Enter: edit date/time', 00h
++msg_menu_help_2	db	'F10: save and exit   Esc: exit without saving', 00h
++msg_menu_no_rtc	db	'no RTC detected', 00h
++msg_menu_chs	db	'CHS ', 00h
++msg_menu_mib	db	' MiB', 00h
